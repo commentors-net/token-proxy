@@ -2,4 +2,6 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/token-proxy/TokConLib/bin
+
+token-proxy/Token-Proxy/bin/
+token-proxy/Token-Proxy/obj/
