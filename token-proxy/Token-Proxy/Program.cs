@@ -3,6 +3,7 @@ using Nethereum.Web3.Accounts;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Token_Proxy.Contract;
 
 namespace Token_Proxy
 {
@@ -11,11 +12,6 @@ namespace Token_Proxy
 
         private static readonly string ROPSTEN_ADDRESS = "https://ropsten.infura.io/v3/fc6598ddab264c89a508cdb97d5398ea";
         private static string PrivateKey = "PrivateKey";
-        private static string AbiContract = @"abi-contract";
-        private static string ByteCodeContract = "byte-code-contract";
-
-        private static string AbiProxy = @"abi-proxy";
-        private static string ByteCodeProxy = "byte-code-proxy";
 
         public static string ContractAddress
         {
@@ -47,41 +43,41 @@ namespace Token_Proxy
 
         private static async Task DeployContractProxyAsync()
         {
-            var TranHash = await GetWeb3Object.Eth.DeployContract.SendRequestAsync
-                (AbiContract, ByteCodeContract, MainAddress, new Nethereum.Hex.HexTypes.HexBigInteger("470000"));
-            if (TranHash != null)
+            var dgtImplementation = new DGTImplementationDeployment();
+            var dgtImplementationHandler = GetWeb3Object.Eth.GetContractDeploymentHandler<DGTImplementationDeployment>();
+            var dgtImplementationReceiptDeployment = await dgtImplementationHandler.SendRequestAndWaitForReceiptAsync(dgtImplementation);
+
+            ContractAddress = dgtImplementationReceiptDeployment.ContractAddress;
+
+            Console.WriteLine(ContractAddress);
+          
+
+            var adminUpgradeabilityProxyDeployment = new AdminUpgradeabilityProxyDeployment();
+            adminUpgradeabilityProxyDeployment.Implementation = dgtImplementationReceiptDeployment.ContractAddress;
+            var adminUpgradeabilityProxyDeploymentHandler = GetWeb3Object.Eth.GetContractDeploymentHandler<AdminUpgradeabilityProxyDeployment>();
+            var adminUpgradeabilityProxyReceiptDeployment = await adminUpgradeabilityProxyDeploymentHandler.SendRequestAndWaitForReceiptAsync(adminUpgradeabilityProxyDeployment);
+
+
+            ProxyAddress = adminUpgradeabilityProxyReceiptDeployment.ContractAddress;
+
+            Console.WriteLine(ProxyAddress);
+          
+            Thread.Sleep(2000);
+
+            var contractHandler = GetWeb3Object.Eth.GetContractHandler(ProxyAddress);
+            var changeAdminFunction = new ChangeAdminFunction();
+            changeAdminFunction.NewAdmin = MainAddress;
+            var changeAdminFunctionTxnReceipt = await contractHandler.SendRequestAndWaitForReceiptAsync(changeAdminFunction);
+            try
             {
-                try
-                {
-                    var receipt = await GetWeb3Object.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(TranHash);
-
-                    while (receipt == null)
-                    {
-                        Thread.Sleep(5000);
-                        receipt = await GetWeb3Object.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(TranHash);
-                    }
-
-                    ContractAddress = receipt.ContractAddress;
-                    Console.WriteLine("Contract " + ContractAddress);
-                    // Deploying Proxy
-
-                    var TranHash2 = await GetWeb3Object.Eth.DeployContract.SendRequestAsync
-                        (AbiProxy, ByteCodeProxy, MainAddress, new Nethereum.Hex.HexTypes.HexBigInteger("470000"));
-
-                    while (receipt == null)
-                    {
-                        Thread.Sleep(5000);
-                        receipt = await GetWeb3Object.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(TranHash2);
-                    }
-
-                    ProxyAddress = receipt.ContractAddress;
-                    Console.WriteLine("Proxy " + ProxyAddress);
-                }
-
-                catch (Exception ee)
-                {
-                    Console.WriteLine(ee.StackTrace);
-                }
+                // Need proxy contract object of ContractAddress 
+                contractHandler = GetWeb3Object.Eth.GetContractHandler(ContractAddress);
+                var initializeFunctionTxnReceipt = await contractHandler.SendRequestAndWaitForReceiptAsync<InitializeFunction>();
+                Console.WriteLine(initializeFunctionTxnReceipt.TransactionHash);
+            }
+            catch (Exception e)
+            {
+                var es = e.StackTrace;
             }
         }
     }
